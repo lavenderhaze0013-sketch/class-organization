@@ -1,0 +1,993 @@
+import React, { useState, useRef } from 'react';
+import { Plus, Trash2, RefreshCw, Users, RotateCcw, Monitor, Download, Upload, Heart, Sparkles, X, BrainCircuit, FileText, Printer } from 'lucide-react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// -------------------------------------------------------------------------
+// [중요] 깃허브 배포 시 아래 따옴표 안에 본인의 Gemini API Key를 입력하세요.
+// 예: const GEMINI_API_KEY = "AIzaSy...";
+// 키가 없으면 AI 기능은 작동하지 않지만, 자리 배치 기능은 정상 작동합니다.
+// -------------------------------------------------------------------------
+const YOUR_GEMINI_API_KEY = ""; 
+
+const SeatArrangement = () => {
+  // -------------------------------------------------------------------------
+  // Gemini API Setup
+  // -------------------------------------------------------------------------
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+
+  // Environment detection for Gemini Key
+  const getApiKey = () => {
+    // 1. Try environment variable (Chat environment)
+    // 2. Try manual key (GitHub Pages)
+    return typeof apiKey !== 'undefined' ? apiKey : YOUR_GEMINI_API_KEY;
+  };
+
+  const analyzeArrangementWithGemini = async () => {
+    if (Object.keys(assignments).length === 0) {
+      alert("분석할 자리 배치가 없습니다. 먼저 학생들을 배치해주세요.");
+      return;
+    }
+
+    const currentKey = getApiKey();
+    if (!currentKey) {
+      alert("Gemini API 키가 설정되지 않았습니다. 코드 상단의 'YOUR_GEMINI_API_KEY'에 키를 입력해주세요.");
+      return;
+    }
+
+    setIsAiLoading(true);
+    setShowAiModal(true);
+    setAiAnalysis(null);
+
+    try {
+      // 1. Construct the classroom context for Gemini
+      const seatDescriptions = [];
+      const rowLabels = ["맨 앞줄", "앞에서 두번째 줄", "중간 줄", "뒤에서 두번째 줄", "맨 뒷줄"];
+      
+      Object.keys(assignments).forEach(seatIdx => {
+        const idx = parseInt(seatIdx);
+        if (idx === 0) return;
+
+        const studentId = assignments[seatIdx];
+        const student = students.find(s => s.id === studentId);
+        if (!student) return;
+
+        // Calculate Position
+        const r = Math.floor(idx / 6);
+        const c = idx % 6;
+        let group = "왼쪽 분단";
+        if (c >= 2 && c <= 3) group = "중앙 분단";
+        if (c >= 4) group = "오른쪽 분단";
+
+        seatDescriptions.push(
+          `- 자리 ${idx}번 (${rowLabels[r]}, ${group}): ${student.name} (${student.gender === 'male' ? '남' : '여'})`
+        );
+      });
+
+      const prompt = `
+        당신은 베테랑 학교 선생님이자 학급 경영 전문가입니다. 
+        현재 교실의 자리 배치도를 텍스트로 전달해 드릴 테니, 이 배치의 장단점과 교육적 조언을 분석해 주세요.
+        
+        [교실 상황]
+        - 총원: ${students.length}명
+        - 배치 구조: 2명씩 짝을 지어 3개 분단으로 구성됨. 5줄.
+        - 교탁은 맨 앞(또는 시각적으로 맨 아래)에 위치함.
+        
+        [현재 배치 현황]
+        ${seatDescriptions.join('\n')}
+
+        [요청 사항]
+        다음 항목에 대해 마크다운 형식으로 분석해 주세요. 이모지를 적절히 사용해 주세요.
+        1. **⚖️ 성별 및 균형 분석**: 남녀 짝꿍 비율, 성별 쏠림 현상 등이 있는지?
+        2. **👀 시야 및 집중도**: 교탁(앞쪽) 근처와 뒷자리의 학생 성향 분포에 따른 수업 분위기 예측.
+        3. **💡 담임 교사를 위한 팁**: 이 배치로 수업할 때 선생님이 주의 깊게 봐야 할 구역이나 칭찬해 줄 포인트.
+        
+        말투는 "선생님, 현재 배치를 보니..." 처럼 정중하고 부드러운 구어체로 작성해 주세요.
+        분석은 500자 이내로 핵심만 요약해 주세요.
+      `;
+
+      // 2. Call Gemini
+      const genAI = new GoogleGenerativeAI(currentKey); 
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-09-2025" });
+      
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      setAiAnalysis(text);
+
+    } catch (error) {
+      console.error("Gemini Error:", error);
+      setAiAnalysis("죄송합니다. AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.\n(API 키가 올바른지 확인해주세요)");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // State Definitions
+  // -------------------------------------------------------------------------
+  const [students, setStudents] = useState([
+    { id: 's1', number: '1', name: '김철수', gender: 'male' },
+    { id: 's2', number: '2', name: '이영희', gender: 'female' },
+    { id: 's3', number: '3', name: '박민준', gender: 'male' },
+    { id: 's4', number: '4', name: '최지우', gender: 'female' },
+    { id: 's5', number: '5', name: '정우성', gender: 'male' },
+    { id: 's6', number: '6', name: '김태희', gender: 'female' },
+    { id: 's7', number: '7', name: '강동원', gender: 'male' },
+    { id: 's8', number: '8', name: '송혜교', gender: 'female' },
+  ]);
+
+  const [assignments, setAssignments] = useState({}); // { seatIndex: studentId }
+  const [newName, setNewName] = useState('');
+  const [newNumber, setNewNumber] = useState('');
+  const [newGender, setNewGender] = useState('male');
+  const [selectedStudentId, setSelectedStudentId] = useState(null); 
+  const [isOptimizing, setIsOptimizing] = useState(false); 
+  const [isShuffling, setIsShuffling] = useState(false);
+
+  const fileInputRef = useRef(null);
+  const mindDistanceInputRef = useRef(null);
+
+  // -------------------------------------------------------------------------
+  // Print Logic
+  // -------------------------------------------------------------------------
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // -------------------------------------------------------------------------
+  // CSV Import / Export Logic (Roster)
+  // -------------------------------------------------------------------------
+  const downloadRosterCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+    csvContent += "자리 위치,학생 번호,이름,성별\n";
+
+    const assignedIds = new Set();
+    Object.keys(assignments).forEach(seatIdx => {
+      const sId = assignments[seatIdx];
+      const student = students.find(s => s.id === sId);
+      if (student && parseInt(seatIdx) !== 0) {
+        csvContent += `${seatIdx}번 자리,${student.number || ''},${student.name},${student.gender === 'male' ? '남' : '여'}\n`;
+        assignedIds.add(sId);
+      }
+    });
+
+    students.forEach(s => {
+      if (!assignedIds.has(s.id)) {
+        csvContent += `대기,${s.number || ''},${s.name},${s.gender === 'male' ? '남' : '여'}\n`;
+      }
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "자리배치_명단.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadMindDistanceTemplate = () => {
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+    
+    const names = students.map(s => `${s.number ? s.number + '번 ' : ''}${s.name}`);
+    const header = ["이름", ...names];
+    csvContent += header.join(",") + "\n";
+
+    students.forEach((s, rowIdx) => {
+      const rowName = `${s.number ? s.number + '번 ' : ''}${s.name}`;
+      const rowData = [rowName];
+      
+      students.forEach((_, colIdx) => {
+        if (rowIdx === colIdx) {
+          rowData.push("-"); 
+        } else {
+          rowData.push(""); 
+        }
+      });
+      csvContent += rowData.join(",") + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "마음거리_양식.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplates = () => {
+    downloadRosterCSV();
+    setTimeout(() => {
+      downloadMindDistanceTemplate();
+    }, 500);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const lines = text.split('\n');
+      
+      const newStudents = [];
+      let addedCount = 0;
+
+      lines.forEach((line, index) => {
+        if (!line.trim()) return;
+        
+        const cols = line.split(',');
+        
+        let number = '';
+        let name = '';
+        let genderRaw = '';
+        
+        if (cols.length >= 4) {
+           number = cols[1].trim();
+           name = cols[2].trim();
+           genderRaw = cols[3].trim();
+        } else if (cols.length === 3) {
+           number = cols[0].trim();
+           name = cols[1].trim();
+           genderRaw = cols[2].trim();
+        } else if (cols.length === 2) {
+           name = cols[0].trim();
+           genderRaw = cols[1].trim();
+        }
+
+        if (name.includes('이름') || name === '') return;
+
+        const gender = (genderRaw === '남' || genderRaw === 'male' || genderRaw === '남자') ? 'male' : 'female';
+        
+        if (name) {
+          newStudents.push({
+            id: `imported_${Date.now()}_${index}`,
+            number: number,
+            name: name,
+            gender: gender
+          });
+          addedCount++;
+        }
+      });
+
+      if (addedCount > 0) {
+        if (confirm(`${addedCount}명의 학생 명단을 불러왔습니다.\n기존 명단에 추가하시겠습니까? (취소 시 기존 명단은 삭제되고 새로 불러옵니다)`)) {
+          setStudents(prev => [...prev, ...newStudents]);
+        } else {
+          setStudents(newStudents);
+          setAssignments({}); 
+        }
+      } else {
+        alert('데이터를 불러오지 못했습니다. CSV 형식을 확인해주세요.\n(권장: 번호, 이름, 성별)');
+      }
+      
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+
+  // -------------------------------------------------------------------------
+  // MIND DISTANCE ALGORITHM
+  // -------------------------------------------------------------------------
+  const handleMindDistanceUpload = () => {
+    if (students.length === 0) {
+      alert("먼저 학생 명단을 등록해주세요.");
+      return;
+    }
+    alert("마음거리 검사 결과(CSV) 파일을 선택해주세요.\n첫 열과 첫 행에 학생 이름(또는 번호+이름)이 있어야 합니다.");
+    mindDistanceInputRef.current?.click();
+  };
+
+  const parseMindDistanceCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const rows = text.split('\n').map(row => row.split(','));
+      
+      if (rows.length < 2) {
+        alert("데이터가 너무 적습니다.");
+        return;
+      }
+
+      // 1. Identify Students
+      const headerMap = {}; 
+      const headerRow = rows[0];
+      
+      headerRow.forEach((colText, idx) => {
+        if (idx === 0) return; 
+        const cleanName = colText.replace(/[0-9]+번/g, '').trim(); 
+        const matchedStudent = students.find(s => s.name === cleanName || (s.number && colText.includes(s.number + '번')));
+        if (matchedStudent) {
+          headerMap[idx] = matchedStudent.id;
+        }
+      });
+
+      // 2. Build Matrix
+      const relations = {}; 
+      students.forEach(s => relations[s.id] = {});
+
+      rows.forEach((row, rowIdx) => {
+        if (rowIdx === 0) return; 
+        const rowLabel = row[0];
+        if (!rowLabel) return;
+
+        const cleanName = rowLabel.replace(/[0-9]+번/g, '').trim();
+        const sourceStudent = students.find(s => s.name === cleanName || (s.number && rowLabel.includes(s.number + '번')));
+        
+        if (sourceStudent) {
+          row.forEach((cellValue, colIdx) => {
+            const targetId = headerMap[colIdx];
+            if (targetId && sourceStudent.id !== targetId) {
+              const val = parseInt(cellValue.trim());
+              if (!isNaN(val)) {
+                relations[sourceStudent.id][targetId] = val;
+              }
+            }
+          });
+        }
+      });
+
+      // 3. Run Optimization
+      runOptimization(relations);
+    };
+    reader.readAsText(file);
+    if (mindDistanceInputRef.current) mindDistanceInputRef.current.value = '';
+  };
+
+  const runOptimization = (relations) => {
+    setIsOptimizing(true);
+    setTimeout(() => {
+      try {
+        let bestAssignments = {};
+        const studentIds = students.map(s => s.id);
+        const shuffled = [...studentIds].sort(() => Math.random() - 0.5);
+        
+        const validSeats = Array.from({length: 29}, (_, i) => i + 1);
+        validSeats.forEach((seat, i) => {
+          if (shuffled[i]) bestAssignments[seat] = shuffled[i];
+        });
+
+        let bestScore = calculateScore(bestAssignments, relations);
+        const iterations = 8000;
+        let currentAssignments = { ...bestAssignments };
+        let currentScore = bestScore;
+
+        for (let i = 0; i < iterations; i++) {
+          const seatA = validSeats[Math.floor(Math.random() * validSeats.length)];
+          const seatB = validSeats[Math.floor(Math.random() * validSeats.length)];
+          if (seatA === seatB) continue;
+
+          const newAssignments = { ...currentAssignments };
+          const studentA = newAssignments[seatA];
+          const studentB = newAssignments[seatB];
+
+          if (!studentA && !studentB) continue; 
+
+          newAssignments[seatA] = studentB;
+          newAssignments[seatB] = studentA;
+          
+          if (!newAssignments[seatA]) delete newAssignments[seatA];
+          if (!newAssignments[seatB]) delete newAssignments[seatB];
+
+          const newScore = calculateScore(newAssignments, relations);
+
+          if (newScore > currentScore) {
+            currentAssignments = newAssignments;
+            currentScore = newScore;
+            
+            if (newScore > bestScore) {
+              bestScore = newScore;
+              bestAssignments = { ...newAssignments };
+            }
+          } 
+        }
+
+        setAssignments(bestAssignments);
+        alert(`배치 완료! (최적화 점수: ${bestScore}점)\n서로 1번(가까움)인 친구들을 붙이고, 3번(불편)은 떨어뜨렸습니다.`);
+      } catch (err) {
+        console.error(err);
+        alert("배치 중 오류가 발생했습니다.");
+      } finally {
+        setIsOptimizing(false);
+      }
+    }, 100); 
+  };
+
+  const calculateScore = (assignmentMap, relations) => {
+    let score = 0;
+    const seatIndices = Object.keys(assignmentMap).map(Number);
+
+    for (let i = 0; i < seatIndices.length; i++) {
+      for (let j = i + 1; j < seatIndices.length; j++) {
+        const seatA = seatIndices[i];
+        const seatB = seatIndices[j];
+        const studentA = assignmentMap[seatA];
+        const studentB = assignmentMap[seatB];
+
+        if (!studentA || !studentB) continue;
+
+        const adjacency = getAdjacencyType(seatA, seatB);
+        if (adjacency === 'none') continue; 
+
+        const valA = relations[studentA]?.[studentB];
+        const valB = relations[studentB]?.[studentA];
+
+        if (adjacency === 'partner') {
+          if (valA === 1 && valB === 1) score += 500;
+          else if (valA === 1 || valB === 1) score += 50;
+          if (valA === 4 || valB === 4) score += 20;
+          if (valA === 3 || valB === 3) score -= 10000;
+        }
+        else if (adjacency === 'nearby') {
+           if (valA === 4 || valB === 4) score += 5;
+           if (valA === 3 || valB === 3) score -= 50; 
+        }
+      }
+    }
+    return score;
+  };
+
+  const getAdjacencyType = (seat1, seat2) => {
+    const r1 = Math.floor(seat1 / 6);
+    const c1 = seat1 % 6;
+    const r2 = Math.floor(seat2 / 6);
+    const c2 = seat2 % 6;
+    const distRow = Math.abs(r1 - r2);
+    const distCol = Math.abs(c1 - c2);
+
+    if (r1 === r2 && distCol === 1) {
+      const minCol = Math.min(c1, c2);
+      if (minCol === 0 || minCol === 2 || minCol === 4) {
+        return 'partner';
+      }
+    }
+    if (distRow <= 1 && distCol <= 1) {
+      return 'nearby';
+    }
+    return 'none';
+  };
+
+  // -------------------------------------------------------------------------
+  // Existing Logic
+  // -------------------------------------------------------------------------
+  const addStudent = (e) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    const newStudent = {
+      id: Date.now().toString(),
+      number: newNumber.trim(),
+      name: newName,
+      gender: newGender,
+    };
+    setStudents([...students, newStudent]);
+    setNewName('');
+    setNewNumber('');
+  };
+
+  const removeStudent = (studentId) => {
+    setStudents(students.filter((s) => s.id !== studentId));
+    const newAssignments = { ...assignments };
+    Object.keys(newAssignments).forEach((seatIdx) => {
+      if (newAssignments[seatIdx] === studentId) {
+        delete newAssignments[seatIdx];
+      }
+    });
+    setAssignments(newAssignments);
+  };
+
+  const assignStudentToSeat = (studentId, seatIndex) => {
+    if (seatIndex === 0) return;
+
+    const currentSeatOfStudent = Object.keys(assignments).find(
+      (key) => assignments[key] === studentId
+    );
+
+    const targetSeatStudentId = assignments[seatIndex];
+    const newAssignments = { ...assignments };
+
+    if (currentSeatOfStudent) {
+      delete newAssignments[currentSeatOfStudent];
+    }
+
+    if (targetSeatStudentId && currentSeatOfStudent) {
+      newAssignments[currentSeatOfStudent] = targetSeatStudentId;
+    }
+
+    newAssignments[seatIndex] = studentId;
+    setAssignments(newAssignments);
+    setSelectedStudentId(null);
+  };
+
+  const handleSeatClick = (seatIndex) => {
+    if (seatIndex === 0) return;
+
+    if (selectedStudentId) {
+      assignStudentToSeat(selectedStudentId, seatIndex);
+    } else {
+      const studentId = assignments[seatIndex];
+      if (studentId) {
+        setSelectedStudentId(studentId);
+      }
+    }
+  };
+
+  const handleRosterClick = (studentId) => {
+    if (selectedStudentId === studentId) {
+      setSelectedStudentId(null);
+    } else {
+      setSelectedStudentId(studentId);
+    }
+  };
+
+  const randomAssign = () => {
+    if (students.length === 0) {
+      alert("배치할 학생 명단이 없습니다. 먼저 학생을 추가해주세요.");
+      return;
+    }
+    setIsShuffling(true);
+    setTimeout(() => {
+      const shuffled = [...students].sort(() => Math.random() - 0.5);
+      const newAssignments = {};
+      const validSeats = [];
+      for (let i = 1; i < 30; i++) validSeats.push(i);
+
+      shuffled.forEach((student, index) => {
+        if (index < validSeats.length) {
+          newAssignments[validSeats[index]] = student.id;
+        }
+      });
+      
+      setAssignments(newAssignments);
+      setSelectedStudentId(null);
+      setIsShuffling(false); 
+    }, 500); 
+  };
+
+  const clearAssignments = () => {
+    // 확인 창(confirm) 제거하여 즉시 실행되도록 수정
+    setAssignments({});
+    setSelectedStudentId(null);
+  };
+
+  const getStudentById = (id) => students.find((s) => s.id === id);
+
+  // Drag and Drop
+  const handleDragStart = (e, studentId) => {
+    e.dataTransfer.setData('text/plain', studentId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  const handleDrop = (e, seatIndex) => {
+    e.preventDefault();
+    if (seatIndex === 0) return; 
+    const studentId = e.dataTransfer.getData('text/plain');
+    if (studentId) assignStudentToSeat(studentId, seatIndex);
+  };
+
+  // Render Seat
+  const renderSeat = (seatIndex) => {
+    if (seatIndex === 0) {
+      return (
+        <div key={seatIndex} className="w-full h-20 sm:h-24 opacity-0 pointer-events-none" aria-hidden="true" />
+      );
+    }
+
+    const studentId = assignments[seatIndex];
+    const student = studentId ? getStudentById(studentId) : null;
+    const isSelected = selectedStudentId && studentId === selectedStudentId;
+    const isTarget = selectedStudentId && !studentId;
+
+    let bgColor = 'bg-white';
+    let borderColor = 'border-gray-200';
+    let textColor = 'text-gray-400';
+
+    if (student) {
+      if (student.gender === 'male') {
+        bgColor = 'bg-emerald-100';
+        borderColor = 'border-emerald-300';
+        textColor = 'text-emerald-900';
+      } else {
+        bgColor = 'bg-purple-100';
+        borderColor = 'border-purple-300';
+        textColor = 'text-purple-900';
+      }
+    }
+
+    if (isSelected) {
+      borderColor = 'border-blue-500 ring-2 ring-blue-200';
+    }
+
+    return (
+      <div
+        key={seatIndex}
+        onClick={() => handleSeatClick(seatIndex)}
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, seatIndex)}
+        draggable={!!student}
+        onDragStart={(e) => student && handleDragStart(e, student.id)}
+        className={`
+          relative flex flex-col items-center justify-center p-2 rounded-lg border-2 shadow-sm
+          w-full h-20 sm:h-24 transition-all duration-200 cursor-pointer
+          ${bgColor} ${borderColor} 
+          ${isTarget ? 'ring-2 ring-dashed ring-blue-300 bg-blue-50' : ''}
+          hover:shadow-md
+          print:border-2 print:shadow-none print:h-24
+        `}
+      >
+        {student ? (
+          <>
+            <span className={`font-bold text-lg ${textColor} flex flex-col items-center leading-tight print:text-black`}>
+              {student.number && <span className="text-xs font-normal opacity-70 mb-0.5">{student.number}</span>}
+              {student.name}
+            </span>
+          </>
+        ) : (
+          <span className="text-gray-300 text-sm font-medium print:text-gray-200">{seatIndex}</span>
+        )}
+      </div>
+    );
+  };
+
+  const rows = 5;
+  const renderClassroomLayout = () => {
+    const grid = [];
+    for (let r = 0; r < rows; r++) {
+      const rowSeats = [];
+      // Group 1 (Left)
+      rowSeats.push(
+        <div key={`g1-${r}`} className="flex gap-2 w-full">
+          {renderSeat(r * 6 + 0)}
+          {renderSeat(r * 6 + 1)}
+        </div>
+      );
+      // Group 2 (Center)
+      rowSeats.push(
+        <div key={`g2-${r}`} className="flex gap-2 w-full">
+          {renderSeat(r * 6 + 2)}
+          {renderSeat(r * 6 + 3)}
+        </div>
+      );
+      // Group 3 (Right)
+      rowSeats.push(
+        <div key={`g3-${r}`} className="flex gap-2 w-full">
+          {renderSeat(r * 6 + 4)}
+          {renderSeat(r * 6 + 5)}
+        </div>
+      );
+      grid.push(
+        <div key={`row-${r}`} className="flex justify-between items-center gap-4 sm:gap-8 w-full mb-3 print:mb-6">
+          {rowSeats}
+        </div>
+      );
+    }
+    return grid;
+  };
+
+  const unassignedStudents = students.filter(s => !Object.values(assignments).includes(s.id));
+
+  // Markdown renderer for AI Output
+  const renderMarkdown = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, idx) => (
+      <p key={idx} className="mb-2 text-gray-700 leading-relaxed">
+        {line}
+      </p>
+    ));
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-50 text-gray-800 font-sans overflow-hidden">
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 0; }
+          body { 
+            background: white; 
+            overflow: visible;
+          }
+        }
+      `}</style>
+
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm z-50 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0 print:hidden">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+          <div className="flex items-center gap-2">
+            <Users className="text-indigo-600 w-6 h-6" />
+            <h1 className="text-xl font-bold text-gray-800">스마트 자리 배치</h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+           {/* AI Analysis Button */}
+           <button 
+            onClick={analyzeArrangementWithGemini}
+            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-md shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 font-bold text-xs sm:text-sm"
+            title="Gemini AI가 현재 자리 배치를 분석합니다"
+          >
+            <Sparkles className="w-4 h-4 text-yellow-200" />
+            <span className="hidden lg:inline">AI 분석</span>
+          </button>
+
+           {/* Mind Distance Button */}
+           <input 
+            type="file" 
+            accept=".csv" 
+            ref={mindDistanceInputRef} 
+            onChange={parseMindDistanceCSV} 
+            className="hidden" 
+          />
+          <button 
+            onClick={handleMindDistanceUpload}
+            disabled={isOptimizing}
+            className={`
+               flex items-center gap-2 px-3 py-2 text-white rounded-md transition-colors shadow-sm font-medium text-xs sm:text-sm
+               ${isOptimizing ? 'bg-pink-400 cursor-wait' : 'bg-pink-500 hover:bg-pink-600'}
+            `}
+            title="마음거리 검사 결과를 바탕으로 자리를 배치합니다"
+          >
+            <Heart className={`w-4 h-4 ${isOptimizing ? 'animate-spin' : ''}`} />
+            <span className="hidden lg:inline">{isOptimizing ? '분석 중...' : '마음거리 배치'}</span>
+          </button>
+
+          <div className="h-6 w-px bg-gray-300 mx-1 hidden sm:block"></div>
+
+          {/* Existing Buttons */}
+          <input 
+            type="file" 
+            accept=".csv" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            className="hidden" 
+          />
+          <button 
+            onClick={handleImportClick}
+            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm font-medium text-xs sm:text-sm"
+            title="명단 불러오기"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="hidden lg:inline">명단</span>
+          </button>
+          <button 
+            onClick={handleDownloadTemplates}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors shadow-sm font-medium text-xs sm:text-sm"
+            title="양식 다운로드 (명단 및 마음거리 양식)"
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden lg:inline">양식</span>
+          </button>
+          
+          <button 
+            onClick={randomAssign}
+            disabled={isShuffling}
+            className={`
+              flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors shadow-sm font-medium text-xs sm:text-sm cursor-pointer
+              ${isShuffling ? 'opacity-80 cursor-wait' : ''}
+            `}
+            title="랜덤으로 자리를 섞습니다"
+          >
+            <RefreshCw className={`w-4 h-4 ${isShuffling ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isShuffling ? '배치 중...' : '랜덤 배치'}</span>
+          </button>
+          <button 
+            onClick={clearAssignments}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors shadow-sm font-medium text-xs sm:text-sm"
+            title="초기화"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+
+          <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-800 transition-colors shadow-sm font-medium text-xs sm:text-sm"
+            title="자리 배치도 인쇄"
+          >
+            <Printer className="w-4 h-4" />
+            <span className="hidden lg:inline">인쇄</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden print:overflow-visible print:block print:h-auto print:w-full">
+        {/* Left Sidebar */}
+        <aside className="w-full lg:w-80 bg-white border-r border-gray-200 flex flex-col z-10 shadow-lg lg:shadow-none print:hidden">
+          <div className="p-4 border-b border-gray-100">
+            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">새 학생 추가</h2>
+            <form onSubmit={addStudent} className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="번호"
+                  value={newNumber}
+                  onChange={(e) => setNewNumber(e.target.value)}
+                  className="w-16 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center"
+                />
+                <input
+                  type="text"
+                  placeholder="이름 입력"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewGender('male')}
+                  className={`flex-1 py-2 text-sm rounded-md border font-medium transition-colors ${newGender === 'male' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-500'}`}
+                >
+                  남학생
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewGender('female')}
+                  className={`flex-1 py-2 text-sm rounded-md border font-medium transition-colors ${newGender === 'female' ? 'bg-purple-100 border-purple-300 text-purple-800' : 'bg-white border-gray-200 text-gray-500'}`}
+                >
+                  여학생
+                </button>
+              </div>
+              <button 
+                type="submit"
+                className="w-full py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 transition-all flex justify-center items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                추가하기
+              </button>
+            </form>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+                대기 명단 <span className="text-indigo-600 ml-1">({unassignedStudents.length})</span>
+              </h2>
+            </div>
+            
+            {unassignedStudents.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                대기 중인 학생이 없습니다.<br/>모든 학생이 배치되었습니다.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {unassignedStudents.map((student) => (
+                  <div
+                    key={student.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, student.id)}
+                    onClick={() => handleRosterClick(student.id)}
+                    className={`
+                      relative group p-3 rounded-lg border flex flex-col items-center justify-center gap-1 cursor-grab active:cursor-grabbing transition-all hover:shadow-md
+                      ${student.gender === 'male' ? 'bg-emerald-50 border-emerald-200' : 'bg-purple-50 border-purple-200'}
+                      ${selectedStudentId === student.id ? 'ring-2 ring-indigo-500 border-transparent shadow-md transform scale-105' : ''}
+                    `}
+                  >
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removeStudent(student.id); }}
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                    <span className={`font-bold text-sm ${student.gender === 'male' ? 'text-emerald-900' : 'text-purple-900'} text-center`}>
+                      {student.number && <span className="mr-1 opacity-70">{student.number}.</span>}
+                      {student.name}
+                    </span>
+                    <span className="text-xs text-gray-500">{student.gender === 'male' ? '남' : '여'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <div className="p-4 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 space-y-2">
+            <p className="font-bold text-pink-600 flex items-center gap-1">
+              <Heart className="w-3 h-3"/> 마음거리 배치
+            </p>
+            <p className="text-gray-500">
+               학생들 간의 관계를 분석하여 최적의 자리를 찾아줍니다. (CSV 필요)
+            </p>
+            <p className="font-bold text-violet-600 flex items-center gap-1 mt-3">
+              <Sparkles className="w-3 h-3"/> AI 학급 분석
+            </p>
+            <p className="text-gray-500">
+               현재 자리 배치를 AI가 분석하여 성별 균형과 수업 팁을 제공합니다.
+            </p>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <section className="flex-1 bg-gray-100 overflow-auto p-4 sm:p-8 flex flex-col items-center print:bg-white print:p-0 print:overflow-visible">
+          <div className="max-w-4xl w-full bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-10 flex flex-col items-center min-h-[600px] relative print:border-none print:shadow-none print:w-full print:max-w-none print:h-auto print:min-h-0 print:p-0">
+            
+            {/* Loading / Optimizing Overlays */}
+            {isOptimizing && (
+               <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm rounded-xl print:hidden">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mb-4"></div>
+                  <p className="text-pink-600 font-bold text-lg">최적의 자리를 계산 중입니다...</p>
+                  <p className="text-gray-500 text-sm mt-2">친구 관계 점수 분석 중 (최대 5초 소요)</p>
+               </div>
+            )}
+
+            <div className="flex-1 w-full flex flex-col justify-end print:block">
+              <div className="w-full space-y-4 mb-12 print:mb-8">
+                 {renderClassroomLayout()}
+              </div>
+              <div className="w-full flex flex-col items-center mt-8 print:mt-4">
+                <div className="w-full flex justify-center mt-10 print:mt-4">
+                  <div className="relative w-64 h-14 bg-white border border-gray-300 rounded-xl flex items-center justify-center shadow-sm print:border-2 print:border-gray-800">
+                     <div className="absolute -top-2 px-3 bg-white text-xs font-bold text-gray-400 tracking-wider print:text-black">TEACHER</div>
+                     <span className="text-gray-600 font-bold text-lg print:text-black">교 탁</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </main>
+
+      {/* AI Analysis Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden border border-violet-200">
+            <div className="p-4 border-b bg-gradient-to-r from-violet-50 to-fuchsia-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BrainCircuit className="w-6 h-6 text-violet-600" />
+                <h3 className="text-lg font-bold text-gray-800">AI 학급 경영 비서</h3>
+              </div>
+              <button onClick={() => setShowAiModal(false)} className="p-1 hover:bg-white rounded-full transition-colors text-gray-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-white">
+              {isAiLoading ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-4">
+                  <Sparkles className="w-10 h-10 text-violet-500 animate-spin" />
+                  <p className="text-gray-600 font-medium animate-pulse">
+                    Gemini가 교실 배치를 꼼꼼히 살펴보고 있어요...
+                  </p>
+                  <span className="text-xs text-gray-400">성별 균형, 수업 분위기, 지도 포인트를 분석 중입니다.</span>
+                </div>
+              ) : (
+                <div className="prose prose-sm max-w-none text-gray-800">
+                  <div className="bg-violet-50 p-4 rounded-lg border border-violet-100 mb-4">
+                    <p className="text-violet-800 font-medium text-sm flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />
+                      선생님, 현재 배치에 대한 분석 결과입니다.
+                    </p>
+                  </div>
+                  {renderMarkdown(aiAnalysis)}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setShowAiModal(false)}
+                className="px-4 py-2 bg-gray-800 text-white rounded-md text-sm font-medium hover:bg-gray-700 transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SeatArrangement;
