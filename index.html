@@ -1,110 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Trash2, RefreshCw, Users, RotateCcw, Monitor, Download, Upload, Heart, Sparkles, X, BrainCircuit, FileText, Printer } from 'lucide-react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// -------------------------------------------------------------------------
-// [중요] 깃허브 배포 시 아래 따옴표 안에 본인의 Gemini API Key를 입력하세요.
-// 예: const GEMINI_API_KEY = "AIzaSy...";
-// 키가 없으면 AI 기능은 작동하지 않지만, 자리 배치 기능은 정상 작동합니다.
-// -------------------------------------------------------------------------
-const YOUR_GEMINI_API_KEY = ""; 
+import { Plus, Trash2, RefreshCw, Users, RotateCcw, Monitor, Upload, Heart, FileText, Printer } from 'lucide-react';
 
 const SeatArrangement = () => {
-  // -------------------------------------------------------------------------
-  // Gemini API Setup
-  // -------------------------------------------------------------------------
-  const [aiAnalysis, setAiAnalysis] = useState(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [showAiModal, setShowAiModal] = useState(false);
-
-  // Environment detection for Gemini Key
-  const getApiKey = () => {
-    // 1. Try environment variable (Chat environment)
-    // 2. Try manual key (GitHub Pages)
-    return typeof apiKey !== 'undefined' ? apiKey : YOUR_GEMINI_API_KEY;
-  };
-
-  const analyzeArrangementWithGemini = async () => {
-    if (Object.keys(assignments).length === 0) {
-      alert("분석할 자리 배치가 없습니다. 먼저 학생들을 배치해주세요.");
-      return;
-    }
-
-    const currentKey = getApiKey();
-    if (!currentKey) {
-      alert("Gemini API 키가 설정되지 않았습니다. 코드 상단의 'YOUR_GEMINI_API_KEY'에 키를 입력해주세요.");
-      return;
-    }
-
-    setIsAiLoading(true);
-    setShowAiModal(true);
-    setAiAnalysis(null);
-
-    try {
-      // 1. Construct the classroom context for Gemini
-      const seatDescriptions = [];
-      const rowLabels = ["맨 앞줄", "앞에서 두번째 줄", "중간 줄", "뒤에서 두번째 줄", "맨 뒷줄"];
-      
-      Object.keys(assignments).forEach(seatIdx => {
-        const idx = parseInt(seatIdx);
-        if (idx === 0) return;
-
-        const studentId = assignments[seatIdx];
-        const student = students.find(s => s.id === studentId);
-        if (!student) return;
-
-        // Calculate Position
-        const r = Math.floor(idx / 6);
-        const c = idx % 6;
-        let group = "왼쪽 분단";
-        if (c >= 2 && c <= 3) group = "중앙 분단";
-        if (c >= 4) group = "오른쪽 분단";
-
-        seatDescriptions.push(
-          `- 자리 ${idx}번 (${rowLabels[r]}, ${group}): ${student.name} (${student.gender === 'male' ? '남' : '여'})`
-        );
-      });
-
-      const prompt = `
-        당신은 베테랑 학교 선생님이자 학급 경영 전문가입니다. 
-        현재 교실의 자리 배치도를 텍스트로 전달해 드릴 테니, 이 배치의 장단점과 교육적 조언을 분석해 주세요.
-        
-        [교실 상황]
-        - 총원: ${students.length}명
-        - 배치 구조: 2명씩 짝을 지어 3개 분단으로 구성됨. 5줄.
-        - 교탁은 맨 앞(또는 시각적으로 맨 아래)에 위치함.
-        
-        [현재 배치 현황]
-        ${seatDescriptions.join('\n')}
-
-        [요청 사항]
-        다음 항목에 대해 마크다운 형식으로 분석해 주세요. 이모지를 적절히 사용해 주세요.
-        1. **⚖️ 성별 및 균형 분석**: 남녀 짝꿍 비율, 성별 쏠림 현상 등이 있는지?
-        2. **👀 시야 및 집중도**: 교탁(앞쪽) 근처와 뒷자리의 학생 성향 분포에 따른 수업 분위기 예측.
-        3. **💡 담임 교사를 위한 팁**: 이 배치로 수업할 때 선생님이 주의 깊게 봐야 할 구역이나 칭찬해 줄 포인트.
-        
-        말투는 "선생님, 현재 배치를 보니..." 처럼 정중하고 부드러운 구어체로 작성해 주세요.
-        분석은 500자 이내로 핵심만 요약해 주세요.
-      `;
-
-      // 2. Call Gemini
-      const genAI = new GoogleGenerativeAI(currentKey); 
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-09-2025" });
-      
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      setAiAnalysis(text);
-
-    } catch (error) {
-      console.error("Gemini Error:", error);
-      setAiAnalysis("죄송합니다. AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.\n(API 키가 올바른지 확인해주세요)");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
   // -------------------------------------------------------------------------
   // State Definitions
   // -------------------------------------------------------------------------
@@ -681,16 +578,6 @@ const SeatArrangement = () => {
 
   const unassignedStudents = students.filter(s => !Object.values(assignments).includes(s.id));
 
-  // Markdown renderer for AI Output
-  const renderMarkdown = (text) => {
-    if (!text) return null;
-    return text.split('\n').map((line, idx) => (
-      <p key={idx} className="mb-2 text-gray-700 leading-relaxed">
-        {line}
-      </p>
-    ));
-  };
-
   return (
     <div className="flex flex-col h-screen bg-gray-50 text-gray-800 font-sans overflow-hidden">
       <style>{`
@@ -713,16 +600,6 @@ const SeatArrangement = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
-           {/* AI Analysis Button */}
-           <button 
-            onClick={analyzeArrangementWithGemini}
-            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-md shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 font-bold text-xs sm:text-sm"
-            title="Gemini AI가 현재 자리 배치를 분석합니다"
-          >
-            <Sparkles className="w-4 h-4 text-yellow-200" />
-            <span className="hidden lg:inline">AI 분석</span>
-          </button>
-
            {/* Mind Distance Button */}
            <input 
             type="file" 
@@ -899,12 +776,6 @@ const SeatArrangement = () => {
             <p className="text-gray-500">
                학생들 간의 관계를 분석하여 최적의 자리를 찾아줍니다. (CSV 필요)
             </p>
-            <p className="font-bold text-violet-600 flex items-center gap-1 mt-3">
-              <Sparkles className="w-3 h-3"/> AI 학급 분석
-            </p>
-            <p className="text-gray-500">
-               현재 자리 배치를 AI가 분석하여 성별 균형과 수업 팁을 제공합니다.
-            </p>
           </div>
         </aside>
 
@@ -938,54 +809,6 @@ const SeatArrangement = () => {
           </div>
         </section>
       </main>
-
-      {/* AI Analysis Modal */}
-      {showAiModal && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden border border-violet-200">
-            <div className="p-4 border-b bg-gradient-to-r from-violet-50 to-fuchsia-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BrainCircuit className="w-6 h-6 text-violet-600" />
-                <h3 className="text-lg font-bold text-gray-800">AI 학급 경영 비서</h3>
-              </div>
-              <button onClick={() => setShowAiModal(false)} className="p-1 hover:bg-white rounded-full transition-colors text-gray-500">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1 bg-white">
-              {isAiLoading ? (
-                <div className="flex flex-col items-center justify-center h-48 gap-4">
-                  <Sparkles className="w-10 h-10 text-violet-500 animate-spin" />
-                  <p className="text-gray-600 font-medium animate-pulse">
-                    Gemini가 교실 배치를 꼼꼼히 살펴보고 있어요...
-                  </p>
-                  <span className="text-xs text-gray-400">성별 균형, 수업 분위기, 지도 포인트를 분석 중입니다.</span>
-                </div>
-              ) : (
-                <div className="prose prose-sm max-w-none text-gray-800">
-                  <div className="bg-violet-50 p-4 rounded-lg border border-violet-100 mb-4">
-                    <p className="text-violet-800 font-medium text-sm flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />
-                      선생님, 현재 배치에 대한 분석 결과입니다.
-                    </p>
-                  </div>
-                  {renderMarkdown(aiAnalysis)}
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
-              <button 
-                onClick={() => setShowAiModal(false)}
-                className="px-4 py-2 bg-gray-800 text-white rounded-md text-sm font-medium hover:bg-gray-700 transition-colors"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
